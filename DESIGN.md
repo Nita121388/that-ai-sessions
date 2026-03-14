@@ -6,6 +6,7 @@
 - Provide a CLI for all interfaces (list, show, status, updates).
 - Keep structure clean, easy to extend, and low-dependency.
 - Minimize bandwidth: preview-first, on-demand full text.
+- v2: Time filtering, richer JSON visualization, and paging for large lists.
 
 ## Non-goals (for v1)
 - True real-time streaming.
@@ -53,9 +54,11 @@ SessionEntry:
 ## API
 - `GET /api/status` -> counts + last scan time.
 - `GET /api/sessions` -> list of sessions (metadata only).
+- Query params: `since`, `until`, `offset`, `limit`, `preview`.
 - `GET /api/sessions?lite=1` -> counts + recent list without previews (lowest bandwidth).
 - `GET /api/session?path=...&full=0|1` -> preview or full text.
 - `GET /api/session?path=...&full=1&confirm=1` -> allow full text even if over confirm threshold.
+- `GET /api/stats` -> summary stats + timeline buckets + type counts.
 - `GET /api/updates` -> update check results (optional config).
 
 ## UI
@@ -69,6 +72,14 @@ SessionEntry:
 - Full text warning:
   - If content length exceeds `confirm_bytes`, show ⚠️ and require a second confirm click.
 - "Show all full text" view is supported but guarded by the same warning/confirm when large.
+- v2 UI upgrades:
+  - Time filter (since/until) with quick presets.
+  - Infinite scroll with offset/limit + "Load more" fallback.
+  - Timeline view for JSON/JSONL sessions:
+    - JSON object/array: render items as timeline nodes.
+    - JSONL: one entry per line as timeline nodes.
+    - Field mapping: title/name/summary -> headline; tags/labels -> chips; level/status/type -> badge; content/message/text -> body; remaining fields in collapsible details.
+  - Charts: activity over time (hour/day) + file type distribution.
 
 ## CLI
 - `tas status`

@@ -11,7 +11,7 @@ import time
 from ..config import Config
 from ..index import SessionIndex
 from ..scanner import SessionEntry
-from ..util import read_text_limited
+from ..util import read_text_limited, parse_time, bucket_start
 from ..updates import check_updates
 
 
@@ -52,6 +52,9 @@ class AppServer:
                 if parsed.path == "/api/updates":
                     self._handle_updates()
                     return
+                if parsed.path == "/api/stats":
+                    self._handle_stats(parsed)
+                    return
                 self._send_json(404, {"error": "not_found"})
 
             def _handle_status(self):
@@ -71,6 +74,9 @@ class AppServer:
                 lite = _truthy(qs.get("lite", ["0"])[0])
                 preview = _truthy(qs.get("preview", ["0"])[0])
                 limit = int(qs.get("limit", [str(app.cfg.max_recent)])[0])
+                offset = int(qs.get("offset", ["0"])[0])
+                since = parse_time(qs.get("since", [""])[0])
+                until = parse_time(qs.get("until", [""])[0])
                 if lite:
                     payload = {
                         "session_count": len(app.index.get_sessions()),
@@ -78,7 +84,10 @@ class AppServer:
                     }
                     self._send_json(200, payload, cacheable=False)
                     return
-                sessions = app.index.get_sessions()
+                sessions = _filter_sessions(app.index.get_sessions(), since, until)
+                total = len(sessions)
+                if offset:
+                    sessions = sessions[offset:]
                 if limit and len(sessions) > limit:
                     sessions = sessions[:limit]
                 items = []
@@ -95,7 +104,7 @@ class AppServer:
                         items.append(item)
                 else:
                     items = [_entry_to_dict(entry) for entry in sessions]
-                self._send_json(200, {"sessions": items})
+                self._send_json(200, {"sessions": items, "total": total, "offset": offset, "limit": limit})
 
             def _handle_session(self, parsed):
                 qs = parse_qs(parsed.query)
@@ -168,6 +177,44 @@ class AppServer:
                     return
                 self._send_json(200, {"targets": [{"target": t, "status": "not_checked"} for t in targets]})
 
+            def _handle_stats(self, parsed):
+                qs = parse_qs(parsed.query)
+                since = parse_time(qs.get("since", [""])[0])
+                until = parse_time(qs.get("until", [""])[0])
+                bucket = qs.get("bucket", ["hour"])[0]
+                if bucket not in {"hour", "day"}:
+                    bucket = "hour"
+                sessions = _filter_sessions(app.index.get_sessions(), since, until)
+                total = len(sessions)
+                type_counts: dict[str, int] = {}
+                for entry in sessions:
+                    ext = Path(entry.path).suffix.lower().lstrip(".") or "other"
+                    type_counts[ext] = type_counts.get(ext, 0) + 1
+                buckets: list[dict[str, float | int]] = []
+                if sessions:
+                    min_ts = since if since is not None else min(s.mtime for s in sessions)
+                    max_ts = until if until is not None else max(s.mtime for s in sessions)
+                    start = bucket_start(min_ts, bucket)
+                    end = bucket_start(max_ts, bucket)
+                    step = 3600 if bucket == "hour" else 86400
+                    counts: dict[float, int] = {}
+                    for entry in sessions:
+                        b = bucket_start(entry.mtime, bucket)
+                        counts[b] = counts.get(b, 0) + 1
+                    current = start
+                    while current <= end:
+                        buckets.append({"start": current, "count": counts.get(current, 0)})
+                        current += step
+                payload = {
+                    "total": total,
+                    "types": type_counts,
+                    "bucket": bucket,
+                    "buckets": buckets,
+                    "since": since,
+                    "until": until,
+                }
+                self._send_json(200, payload)
+
             def _handle_static(self, path: str):
                 if path == "/":
                     path = "/index.html"
@@ -219,12 +266,14 @@ class AppServer:
 
 
 def _entry_to_dict(entry: SessionEntry) -> dict:
+    ext = Path(entry.path).suffix.lower().lstrip(".") or "other"
     return {
         "id": entry.id,
         "path": entry.path,
         "mtime": entry.mtime,
         "size": entry.size,
         "preview_truncated": entry.preview_truncated,
+        "ext": ext,
     }
 
 
@@ -257,3 +306,16 @@ def _is_under_roots(path: Path, roots: list[str]) -> bool:
         except ValueError:
             continue
     return False
+
+
+def _filter_sessions(sessions: list[SessionEntry], since: float | None, until: float | None) -> list[SessionEntry]:
+    if since is None and until is None:
+        return sessions
+    filtered: list[SessionEntry] = []
+    for entry in sessions:
+        if since is not None and entry.mtime < since:
+            continue
+        if until is not None and entry.mtime > until:
+            continue
+        filtered.append(entry)
+    return filtered

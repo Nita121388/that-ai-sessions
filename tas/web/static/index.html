@@ -19,13 +19,68 @@
       </div>
     </header>
 
+    <section class="stats" id="stats">
+      <div class="card">
+        <div class="card-label">Total Sessions</div>
+        <div class="card-value" id="cardTotal">-</div>
+        <div class="card-meta" id="cardRange">All time</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Last Scan</div>
+        <div class="card-value" id="cardScan">-</div>
+        <div class="card-meta" id="cardRefresh">Refresh: -</div>
+      </div>
+      <div class="card chart">
+        <div class="card-label">Activity</div>
+        <div class="chart-box" id="activityChart"></div>
+      </div>
+      <div class="card chart">
+        <div class="card-label">Types</div>
+        <div class="chart-box" id="typeChart"></div>
+      </div>
+    </section>
+
+    <section class="filters">
+      <div class="filter-group">
+        <label>Since</label>
+        <input id="sinceInput" placeholder="YYYY-MM-DD HH:MM" />
+      </div>
+      <div class="filter-group">
+        <label>Until</label>
+        <input id="untilInput" placeholder="YYYY-MM-DD HH:MM" />
+      </div>
+      <div class="filter-group">
+        <label>Bucket</label>
+        <div class="toggle-group">
+          <button class="chip" data-bucket="hour">Hour</button>
+          <button class="chip" data-bucket="day">Day</button>
+        </div>
+      </div>
+      <div class="filter-group presets">
+        <label>Presets</label>
+        <div class="toggle-group">
+          <button class="chip" data-range="1h">1h</button>
+          <button class="chip" data-range="24h">24h</button>
+          <button class="chip" data-range="7d">7d</button>
+          <button class="chip" data-range="all">All</button>
+        </div>
+      </div>
+      <div class="filter-group actions">
+        <button class="btn ghost" id="btnApply">Apply</button>
+      </div>
+    </section>
+
     <main class="layout">
-      <section class="panel list">
+      <section class="panel list" id="listPanel">
         <div class="panel-header">
           <div class="panel-title">Sessions</div>
           <input class="filter" id="filter" placeholder="Filter by path" />
         </div>
+        <div class="list-meta" id="listMeta">Loading...</div>
         <ul class="session-list" id="sessionList"></ul>
+        <div class="list-footer">
+          <button class="btn ghost" id="btnLoadMore">Load more</button>
+        </div>
       </section>
 
       <section class="panel detail">
@@ -43,7 +98,14 @@
             </label>
           </div>
         </div>
-        <pre class="code wrap" id="detailText">No session selected.</pre>
+        <div class="view-tabs">
+          <button class="chip active" id="btnStructured">Structured</button>
+          <button class="chip" id="btnRaw">Raw</button>
+        </div>
+        <div class="timeline" id="timelineView">
+          <div class="empty">Select a session to view its timeline.</div>
+        </div>
+        <pre class="code wrap hidden" id="detailText">No session selected.</pre>
       </section>
     </main>
 

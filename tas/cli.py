@@ -10,7 +10,7 @@ from .config import Config, config_path, discover_roots, load_config, save_confi
 from .index import SessionIndex
 from .scanner import scan_sessions
 from .updates import check_updates
-from .util import read_text_limited
+from .util import read_text_limited, parse_time
 from .web.server import AppServer
 
 
@@ -24,6 +24,9 @@ def main() -> None:
 
     list_p = sub.add_parser("list", help="List sessions")
     list_p.add_argument("--limit", type=int, default=0, help="Max items")
+    list_p.add_argument("--offset", type=int, default=0, help="Skip first N items")
+    list_p.add_argument("--since", help="Filter mtime >= since (timestamp or ISO date)")
+    list_p.add_argument("--until", help="Filter mtime <= until (timestamp or ISO date)")
     list_p.add_argument("--preview", action="store_true", help="Include preview text")
     list_p.add_argument("--json", action="store_true", help="JSON output")
 
@@ -94,6 +97,19 @@ def _cmd_status(cfg: Config) -> None:
 
 def _cmd_list(cfg: Config, args: argparse.Namespace) -> None:
     sessions = scan_sessions(cfg, include_preview=args.preview)
+    since = parse_time(args.since)
+    until = parse_time(args.until)
+    if since is not None or until is not None:
+        filtered = []
+        for entry in sessions:
+            if since is not None and entry.mtime < since:
+                continue
+            if until is not None and entry.mtime > until:
+                continue
+            filtered.append(entry)
+        sessions = filtered
+    if args.offset:
+        sessions = sessions[args.offset :]
     if args.limit:
         sessions = sessions[: args.limit]
     if args.json:

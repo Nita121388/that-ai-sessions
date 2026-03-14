@@ -4,6 +4,7 @@ from pathlib import Path
 import hashlib
 import time
 from typing import Tuple
+from datetime import datetime, date, timezone, timedelta
 
 
 def hash_path(path: Path) -> str:
@@ -26,3 +27,40 @@ def iso_time(ts: float | None = None) -> str:
     if ts is None:
         ts = time.time()
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
+
+
+DEFAULT_TZ = timezone(timedelta(hours=8))
+
+
+def parse_time(value: str | None) -> float | None:
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        dt = None
+    if dt is None:
+        try:
+            d = date.fromisoformat(value)
+            dt = datetime(d.year, d.month, d.day)
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=DEFAULT_TZ)
+    return dt.timestamp()
+
+
+def bucket_start(ts: float, bucket: str) -> float:
+    dt = datetime.fromtimestamp(ts, tz=DEFAULT_TZ)
+    if bucket == "day":
+        dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        dt = dt.replace(minute=0, second=0, microsecond=0)
+    return dt.timestamp()

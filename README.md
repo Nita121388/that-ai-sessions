@@ -1,6 +1,7 @@
 # that-ai-sessions
 
 Local session monitor for Codex/OpenClaw style workflows. Preview-first, low bandwidth, and CLI-friendly.
+Includes time filtering, JSON timeline rendering, and paging for large lists.
 
 ## Quick start
 
@@ -22,6 +23,7 @@ Open the web UI:
 ```bash
 python3 -m tas status
 python3 -m tas list --json
+python3 -m tas list --since \"2026-03-01 00:00\" --until \"2026-03-14 23:59\"
 python3 -m tas show --id <session_id> --full --confirm
 python3 -m tas serve --host 0.0.0.0 --port 8787
 ```
@@ -49,3 +51,4 @@ update_targets = []
 - Preview is default to save bandwidth; full text requires an explicit action.
 - Large full-text reads trigger a warning and require confirmation.
 - Only files under `session_roots` are served.
+- JSON/JSONL sessions are rendered as a timeline with field-based styling.
