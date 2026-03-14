@@ -1,0 +1,20 @@
+[project]
+name = "that-ai-sessions"
+version = "0.1.0"
+description = "Local session monitor for Codex/OpenClaw style workflows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Nita" }
+]
+
+[project.scripts]
+tas = "tas.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tas*"]

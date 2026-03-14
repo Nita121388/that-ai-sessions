@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>that-ai-sessions</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="bg-layer"></div>
+    <header class="top">
+      <div>
+        <div class="brand">that-ai-sessions</div>
+        <div class="subtitle">Local session monitor for Codex/OpenClaw workflows</div>
+      </div>
+      <div class="status" id="status">Loading status...</div>
+      <div class="actions">
+        <button class="btn" id="btnRefresh">Refresh</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel list">
+        <div class="panel-header">
+          <div class="panel-title">Sessions</div>
+          <input class="filter" id="filter" placeholder="Filter by path" />
+        </div>
+        <ul class="session-list" id="sessionList"></ul>
+      </section>
+
+      <section class="panel detail">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title" id="detailTitle">Select a session</div>
+            <div class="meta" id="detailMeta">Preview only to save bandwidth</div>
+          </div>
+          <div class="detail-actions">
+            <button class="btn ghost" id="btnPreview">Preview</button>
+            <button class="btn" id="btnFull">Full</button>
+            <label class="toggle">
+              <input type="checkbox" id="wrapToggle" checked />
+              Wrap lines
+            </label>
+          </div>
+        </div>
+        <pre class="code wrap" id="detailText">No session selected.</pre>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
