@@ -316,8 +316,10 @@ function parseStructured(text, meta) {
   const ext = meta?.ext || "";
   const truncated = meta?.truncated;
   const full = meta?.full;
+  const isJsonl = ext === "jsonl";
+  let jsonError = false;
   if (!trimmed) return { kind: "text", items: [], reason: "No content to render." };
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+  if (!isJsonl && (trimmed.startsWith("{") || trimmed.startsWith("["))) {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
@@ -327,10 +329,10 @@ function parseStructured(text, meta) {
         return { kind: "json", items: [parsed] };
       }
     } catch (_err) {
-      if (!full && (truncated || ext === "json")) {
+      jsonError = true;
+      if (!full && truncated) {
         return { kind: "json", items: [], autoFull: true, reason: "Preview truncated; fetch full to parse JSON." };
       }
-      return { kind: "text", items: [], reason: "Invalid JSON." };
     }
   }
   let lines = trimmed.split(/\r?\n/).filter((line) => line.trim());
@@ -350,8 +352,11 @@ function parseStructured(text, meta) {
   if (items.length) {
     return { kind: "jsonl", items, failed };
   }
-  if (!full && (truncated || ext === "jsonl")) {
+  if (!full && (truncated || isJsonl)) {
     return { kind: "jsonl", items: [], autoFull: true, reason: "Preview truncated; fetch full to parse JSONL." };
+  }
+  if (jsonError) {
+    return { kind: "text", items: [], reason: "Invalid JSON (or JSONL lines invalid)." };
   }
   return { kind: "text", items: [], reason: "Invalid JSONL content." };
 }
