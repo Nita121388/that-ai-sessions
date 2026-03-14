@@ -161,6 +161,7 @@ class AppServer:
                     "text": text,
                     "truncated": truncated,
                     "full": full,
+                    "ext": path.suffix.lower().lstrip(".") or "other",
                 }
                 self._send_json(200, payload)
 

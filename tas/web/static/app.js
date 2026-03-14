@@ -42,13 +42,14 @@ const state = {
   bucket: "hour",
   view: "structured",
   structuredAvailable: false,
+  autoFullAttempted: new Set(),
 };
 
 const FIELD_KEYS = {
   time: ["timestamp", "time", "created_at", "createdAt", "date", "ts"],
   title: ["title", "name", "summary", "event", "action"],
-  tags: ["tags", "labels", "tag", "label"],
-  badge: ["level", "status", "type", "severity"],
+  tags: ["tags", "labels", "tag", "label", "model", "model_provider", "source"],
+  badge: ["level", "status", "type", "severity", "role"],
   body: ["content", "message", "text", "body", "detail", "details"],
 };
 
@@ -209,18 +210,34 @@ async function loadSession(full, forceConfirm) {
   if (data.truncated) {
     detailTextEl.textContent += "\n[truncated]";
   }
-  renderStructured(data.text || "", data.mtime);
+  renderStructured(data.text || "", data.mtime, { truncated: data.truncated, full: data.full, ext: data.ext });
 }
 
-function renderStructured(text, fallbackTime) {
-  const parsed = parseStructured(text);
+function renderStructured(text, fallbackTime, meta) {
+  const parsed = parseStructured(text, meta);
+  if (parsed.autoFull) {
+    const id = state.selectedId;
+    if (id && !state.autoFullAttempted.has(id)) {
+      state.autoFullAttempted.add(id);
+      timelineViewEl.innerHTML = "<div class=\"empty\">Preview truncated, fetching full content for structured view...</div>";
+      loadSession(true, false);
+      return;
+    }
+  }
   state.structuredAvailable = parsed.kind !== "text" && parsed.items.length > 0;
   if (!state.structuredAvailable) {
-    timelineViewEl.innerHTML = "<div class=\"empty\">Structured view not available for this session.</div>";
+    const reason = parsed.reason || "Structured view not available for this session.";
+    timelineViewEl.innerHTML = `<div class=\"empty\">${reason}</div>`;
     return;
   }
   const items = buildTimelineItems(parsed.items, fallbackTime);
   const container = document.createDocumentFragment();
+  if (parsed.failed && parsed.failed > 0) {
+    const notice = document.createElement("div");
+    notice.className = "notice";
+    notice.textContent = `Skipped ${parsed.failed} invalid JSONL lines.`;
+    container.appendChild(notice);
+  }
   items.forEach((item) => {
     const node = document.createElement("div");
     node.className = "timeline-item";
@@ -294,9 +311,12 @@ function renderStructured(text, fallbackTime) {
   timelineViewEl.appendChild(container);
 }
 
-function parseStructured(text) {
+function parseStructured(text, meta) {
   const trimmed = (text || "").trim();
-  if (!trimmed) return { kind: "text", items: [] };
+  const ext = meta?.ext || "";
+  const truncated = meta?.truncated;
+  const full = meta?.full;
+  if (!trimmed) return { kind: "text", items: [], reason: "No content to render." };
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
       const parsed = JSON.parse(trimmed);
@@ -307,20 +327,33 @@ function parseStructured(text) {
         return { kind: "json", items: [parsed] };
       }
     } catch (_err) {
-      /* ignore */
+      if (!full && (truncated || ext === "json")) {
+        return { kind: "json", items: [], autoFull: true, reason: "Preview truncated; fetch full to parse JSON." };
+      }
+      return { kind: "text", items: [], reason: "Invalid JSON." };
     }
   }
-  const lines = trimmed.split(/\r?\n/).filter((line) => line.trim());
-  if (!lines.length) return { kind: "text", items: [] };
+  let lines = trimmed.split(/\r?\n/).filter((line) => line.trim());
+  if (!lines.length) return { kind: "text", items: [], reason: "No JSONL lines found." };
+  if (truncated && lines.length > 1) {
+    lines = lines.slice(0, -1);
+  }
   const items = [];
+  let failed = 0;
   for (const line of lines) {
     try {
       items.push(JSON.parse(line));
     } catch (_err) {
-      return { kind: "text", items: [] };
+      failed += 1;
     }
   }
-  return { kind: "jsonl", items };
+  if (items.length) {
+    return { kind: "jsonl", items, failed };
+  }
+  if (!full && (truncated || ext === "jsonl")) {
+    return { kind: "jsonl", items: [], autoFull: true, reason: "Preview truncated; fetch full to parse JSONL." };
+  }
+  return { kind: "text", items: [], reason: "Invalid JSONL content." };
 }
 
 function buildTimelineItems(items, fallbackTime) {
@@ -337,26 +370,49 @@ function buildTimelineItems(items, fallbackTime) {
 
 function normalizeItem(item, index, fallbackTime) {
   if (!item || typeof item !== "object") return null;
-  const timeValue = pickTime(item) ?? fallbackTime ?? null;
+  const payload = item.payload && typeof item.payload === "object" ? item.payload : null;
+  const timeValue = pickTime(item) ?? pickTime(payload) ?? fallbackTime ?? null;
   const timeLabel = timeValue ? fmtTime(timeValue) : "-";
-  const title = pickField(item, FIELD_KEYS.title) || `Entry ${index + 1}`;
-  const badge = pickField(item, FIELD_KEYS.badge);
-  const body = pickField(item, FIELD_KEYS.body);
-  const tags = pickTags(item);
+
+  let title = pickField(item, FIELD_KEYS.title) || pickField(payload, FIELD_KEYS.title);
+  if (!title) {
+    title = (payload && (payload.role || payload.type)) || item.type || `Entry ${index + 1}`;
+  }
+  let badge = pickField(item, FIELD_KEYS.badge) || pickField(payload, FIELD_KEYS.badge);
+  if (!badge && payload && payload.role) badge = payload.role;
+
+  const bodyInfo = extractBody(item, payload);
+  const body = bodyInfo.text;
+  const tags = mergeTags(pickTags(item), pickTags(payload));
 
   const usedKeys = new Set();
   FIELD_KEYS.time.concat(FIELD_KEYS.title, FIELD_KEYS.badge, FIELD_KEYS.body, FIELD_KEYS.tags).forEach((k) => usedKeys.add(k));
+  if (payload) {
+    usedKeys.add("payload");
+    bodyInfo.usedPayloadKeys.forEach((key) => usedKeys.add(key));
+  }
 
   const details = {};
   Object.keys(item).forEach((key) => {
     if (usedKeys.has(key)) return;
     details[key] = item[key];
   });
+  if (payload && typeof payload === "object") {
+    Object.keys(payload).forEach((key) => {
+      if (usedKeys.has(key)) return;
+      if (details[key] !== undefined) {
+        details[`payload.${key}`] = payload[key];
+      } else {
+        details[key] = payload[key];
+      }
+    });
+  }
 
   return { timeValue, timeLabel, title, badge, body, tags, details };
 }
 
 function pickField(obj, keys) {
+  if (!obj || typeof obj !== "object") return "";
   for (const key of keys) {
     if (obj[key] !== undefined && obj[key] !== null) {
       return String(obj[key]);
@@ -366,6 +422,7 @@ function pickField(obj, keys) {
 }
 
 function pickTags(obj) {
+  if (!obj || typeof obj !== "object") return [];
   for (const key of FIELD_KEYS.tags) {
     const value = obj[key];
     if (!value) continue;
@@ -378,6 +435,7 @@ function pickTags(obj) {
 }
 
 function pickTime(obj) {
+  if (!obj || typeof obj !== "object") return null;
   for (const key of FIELD_KEYS.time) {
     const value = obj[key];
     if (value === undefined || value === null) continue;
@@ -396,6 +454,56 @@ function pickTime(obj) {
     }
   }
   return null;
+}
+
+function extractBody(item, payload) {
+  const usedPayloadKeys = new Set();
+  const direct = pickField(item, FIELD_KEYS.body) || pickField(payload, FIELD_KEYS.body);
+  if (direct) return { text: direct, usedPayloadKeys };
+  if (payload && payload.content) {
+    usedPayloadKeys.add("content");
+    if (typeof payload.content === "string") return { text: payload.content, usedPayloadKeys };
+    if (Array.isArray(payload.content)) {
+      const parts = [];
+      payload.content.forEach((entry) => {
+        if (!entry) return;
+        if (typeof entry === "string") {
+          parts.push(entry);
+          return;
+        }
+        if (entry.text) parts.push(entry.text);
+        else if (entry.summary_text) parts.push(entry.summary_text);
+        else if (entry.content) parts.push(entry.content);
+        else parts.push(JSON.stringify(entry));
+      });
+      return { text: truncateText(parts.join("\\n")), usedPayloadKeys };
+    }
+  }
+  if (payload && Array.isArray(payload.summary)) {
+    usedPayloadKeys.add("summary");
+    const parts = payload.summary.map((s) => (s.summary_text ? s.summary_text : JSON.stringify(s)));
+    return { text: truncateText(parts.join("\\n")), usedPayloadKeys };
+  }
+  return { text: "", usedPayloadKeys };
+}
+
+function truncateText(text) {
+  const max = 4000;
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}\\n...[truncated]`;
+}
+
+function mergeTags(primary, secondary) {
+  const tags = [];
+  (primary || []).forEach((t) => tags.push(t));
+  (secondary || []).forEach((t) => tags.push(t));
+  const seen = new Set();
+  return tags.filter((tag) => {
+    const key = String(tag);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function formatValue(value) {

@@ -334,6 +334,15 @@ body {
   overflow: auto;
 }
 
+.notice {
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px dashed var(--border);
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
 .timeline::before {
   content: "";
   position: absolute;
