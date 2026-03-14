@@ -4,3 +4,4 @@
 - Drafted initial design in DESIGN.md.
 - Updated design for bandwidth-saving, confirm-on-large, and lite API.
 - Scaffolded Python package, CLI, config, web server, and UI.
+- Committed and pushed initial prototype to GitHub.
